@@ -46,8 +46,9 @@ public class GlobalExceptionHandler {
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             errors.put(error.getField(), error.getDefaultMessage());
         }
+        String firstMessage = errors.values().stream().findFirst().orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiResponse<>(false, "Validation failed", errors));
+                .body(new ApiResponse<>(false, firstMessage, errors));
     }
 
     @ExceptionHandler(Exception.class)

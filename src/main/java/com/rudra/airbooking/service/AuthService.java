@@ -50,26 +50,35 @@ public class AuthService {
                 user.getUsername(),
                 user.getEmail(),
                 user.getFullName(),
+                user.getPhone(),
                 user.getRole().name()
         );
     }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
+        String cleanUsername = request.getUsername().trim();
+        String cleanEmail = request.getEmail().trim().toLowerCase();
+        String cleanPhone = request.getPhone() != null ? request.getPhone().trim() : null;
+
+        if (userRepository.existsByUsername(cleanUsername)) {
             throw new IllegalArgumentException("Username is already taken");
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(cleanEmail)) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
+        if (cleanPhone != null && !cleanPhone.isEmpty() && userRepository.existsByPhone(cleanPhone)) {
+            throw new IllegalArgumentException("Mobile number is already registered");
+        }
+
         User user = new User(
-                request.getUsername(),
-                request.getEmail(),
+                cleanUsername,
+                cleanEmail,
                 passwordEncoder.encode(request.getPassword()),
-                request.getFullName(),
-                request.getPhone(),
+                request.getFullName().trim(),
+                cleanPhone,
                 Role.ROLE_USER
         );
 
@@ -83,6 +92,7 @@ public class AuthService {
                 savedUser.getUsername(),
                 savedUser.getEmail(),
                 savedUser.getFullName(),
+                savedUser.getPhone(),
                 savedUser.getRole().name()
         );
     }

@@ -66,7 +66,13 @@ const api = {
             const data = await response.json();
 
             if (!response.ok || (data.hasOwnProperty('success') && !data.success)) {
-                const message = data.message || `Request failed (${response.status})`;
+                let message = data.message || `Request failed (${response.status})`;
+                if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+                    const validationMessages = Object.values(data.data).filter(v => typeof v === 'string');
+                    if (validationMessages.length > 0) {
+                        message = validationMessages.join(' | ');
+                    }
+                }
                 throw new Error(message);
             }
 
@@ -88,6 +94,7 @@ const api = {
             username: data.username,
             email: data.email,
             fullName: data.fullName,
+            phone: data.phone || '',
             role: data.role
         });
         window.dispatchEvent(new CustomEvent('auth-changed'));
@@ -104,6 +111,7 @@ const api = {
             username: data.username,
             email: data.email,
             fullName: data.fullName,
+            phone: data.phone || registerData.phone || '',
             role: data.role
         });
         window.dispatchEvent(new CustomEvent('auth-changed'));

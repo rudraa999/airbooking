@@ -1,9 +1,6 @@
 package com.rudra.airbooking.dto;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.*;
 
 public class BookingRequest {
 
@@ -18,6 +15,11 @@ public class BookingRequest {
     private String passengerEmail;
 
     @NotBlank(message = "Passenger phone is required")
+    @Size(min = 10, max = 20, message = "Passenger phone must be between 10 and 20 characters")
+    @Pattern(
+            regexp = "^(?:(?:\\+?\\d{1,3}[-\\s]?)?[6-9](?:\\d{9}|\\d{4}[-\\s]?\\d{5}|\\d{2}[-\\s]?\\d{3}[-\\s]?\\d{4})|(?:\\+[1-9]\\d{0,3}[-\\s]?\\d{7,12}))$",
+            message = "Passenger phone must be a valid mobile number (e.g., 9876543210 or +91 9876543210)"
+    )
     private String passengerPhone;
 
     @NotNull(message = "Passenger age is required")

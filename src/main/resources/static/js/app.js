@@ -388,20 +388,46 @@ function initModals() {
         }
     });
 
+    // Real-Time Mobile Number Validation & Key Filtering
+    setupPhoneInputValidation('reg-phone', 'reg-phone-error');
+    setupPhoneInputValidation('passenger-phone', 'passenger-phone-error');
+
     // Register Form Submit
     document.getElementById('register-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const submitBtn = e.target.querySelector('button[type="submit"]');
+
+        const fullNameInput = document.getElementById('reg-fullname');
+        const usernameInput = document.getElementById('reg-username');
+        const emailInput = document.getElementById('reg-email');
+        const phoneInput = document.getElementById('reg-phone');
+        const phoneErrorEl = document.getElementById('reg-phone-error');
+        const passwordInput = document.getElementById('reg-password');
+
+        const fullName = fullNameInput.value.trim();
+        const username = usernameInput.value.trim();
+        const email = emailInput.value.trim();
+        const phone = phoneInput.value.trim();
+        const password = passwordInput.value;
+
+        // Mobile number validation
+        const isPhoneValid = validatePhoneInputState(phoneInput, phoneErrorEl, true);
+        if (!isPhoneValid) {
+            phoneInput.focus();
+            showToast(phoneErrorEl.textContent || 'Please enter a valid mobile number', 'error');
+            return;
+        }
+
         submitBtn.disabled = true;
         submitBtn.textContent = 'Creating account...';
 
         try {
             const data = {
-                fullName: document.getElementById('reg-fullname').value.trim(),
-                username: document.getElementById('reg-username').value.trim(),
-                email: document.getElementById('reg-email').value.trim(),
-                phone: document.getElementById('reg-phone').value.trim(),
-                password: document.getElementById('reg-password').value
+                fullName,
+                username,
+                email,
+                phone,
+                password
             };
 
             const res = await api.register(data);
@@ -424,6 +450,15 @@ function initModals() {
         e.preventDefault();
         if (!selectedFlightForBooking) return;
 
+        const passengerPhoneInput = document.getElementById('passenger-phone');
+        const passengerPhoneErrorEl = document.getElementById('passenger-phone-error');
+        const isPassengerPhoneValid = validatePhoneInputState(passengerPhoneInput, passengerPhoneErrorEl, true);
+        if (!isPassengerPhoneValid) {
+            passengerPhoneInput.focus();
+            showToast(passengerPhoneErrorEl.textContent || 'Please enter a valid passenger mobile number', 'error');
+            return;
+        }
+
         const submitBtn = document.getElementById('confirm-booking-btn');
         submitBtn.disabled = true;
         submitBtn.textContent = 'Confirming...';
@@ -432,7 +467,7 @@ function initModals() {
             flightId: selectedFlightForBooking.id,
             passengerName: document.getElementById('passenger-name').value.trim(),
             passengerEmail: document.getElementById('passenger-email').value.trim(),
-            passengerPhone: document.getElementById('passenger-phone').value.trim(),
+            passengerPhone: passengerPhoneInput.value.trim(),
             passengerAge: parseInt(document.getElementById('passenger-age').value, 10),
             seatNumber: document.getElementById('passenger-seat').value.trim() || null
         };
@@ -489,6 +524,125 @@ function initModals() {
     });
 }
 
+// Phone Number Real-Time Validation & Key Filtering
+function setupPhoneInputValidation(inputId, errorId) {
+    const input = document.getElementById(inputId);
+    const errorEl = document.getElementById(errorId);
+    if (!input) return;
+
+    // Prevent typing non-phone characters (letters, special symbols)
+    input.addEventListener('keydown', (e) => {
+        const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+        if (allowedKeys.includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+
+        // Allow digits, space, hyphen
+        if (/^[0-9\s-]$/.test(e.key)) {
+            return;
+        }
+
+        // Allow '+' only at index 0 if not already present
+        if (e.key === '+' && input.selectionStart === 0 && !input.value.includes('+')) {
+            return;
+        }
+
+        // Block any letters or invalid characters
+        e.preventDefault();
+    });
+
+    // Sanitize on input (e.g. if user pastes dirty text) and validate in real time
+    input.addEventListener('input', () => {
+        let val = input.value;
+        const startsWithPlus = val.startsWith('+');
+        val = val.replace(/[^\d\s-]/g, '');
+        if (startsWithPlus) {
+            val = '+' + val.replace(/^\+*/, '');
+        }
+        if (input.value !== val) {
+            input.value = val;
+        }
+        validatePhoneInputState(input, errorEl, false);
+    });
+
+    input.addEventListener('blur', () => {
+        validatePhoneInputState(input, errorEl, true);
+    });
+}
+
+function validatePhoneInputState(input, errorEl, showIfEmpty = false) {
+    if (!input) return false;
+    const raw = input.value.trim();
+
+    if (!raw) {
+        if (showIfEmpty) {
+            input.classList.add('is-invalid');
+            input.classList.remove('is-valid');
+            if (errorEl) {
+                errorEl.textContent = 'Mobile number is required';
+                errorEl.style.display = 'block';
+            }
+        } else {
+            input.classList.remove('is-invalid', 'is-valid');
+            if (errorEl) {
+                errorEl.textContent = '';
+                errorEl.style.display = 'none';
+            }
+        }
+        return false;
+    }
+
+    if (/[a-zA-Z]/.test(raw)) {
+        input.classList.add('is-invalid');
+        input.classList.remove('is-valid');
+        if (errorEl) {
+            errorEl.textContent = 'Mobile number cannot contain letters';
+            errorEl.style.display = 'block';
+        }
+        return false;
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length < 10) {
+        input.classList.add('is-invalid');
+        input.classList.remove('is-valid');
+        if (errorEl) {
+            errorEl.textContent = `Please enter at least 10 digits (${digits.length}/10)`;
+            errorEl.style.display = 'block';
+        }
+        return false;
+    }
+
+    if (digits.length > 15) {
+        input.classList.add('is-invalid');
+        input.classList.remove('is-valid');
+        if (errorEl) {
+            errorEl.textContent = 'Mobile number cannot exceed 15 digits';
+            errorEl.style.display = 'block';
+        }
+        return false;
+    }
+
+    const phoneRegex = /^(?:(?:\+?\d{1,3}[-\s]?)?[6-9](?:\d{9}|\d{4}[-\s]?\d{5}|\d{2}[-\s]?\d{3}[-\s]?\d{4})|(?:\+[1-9]\d{0,3}[-\s]?\d{7,12}))$/;
+    if (!phoneRegex.test(raw)) {
+        input.classList.add('is-invalid');
+        input.classList.remove('is-valid');
+        if (errorEl) {
+            errorEl.textContent = 'Enter a valid 10-digit mobile number (e.g. +91 9876543210 or 9876543210)';
+            errorEl.style.display = 'block';
+        }
+        return false;
+    }
+
+    input.classList.remove('is-invalid');
+    input.classList.add('is-valid');
+    if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+    }
+    return true;
+}
+
 function openModal(modalId) {
     document.getElementById(modalId)?.classList.add('open');
 }
@@ -498,6 +652,15 @@ function closeModal(modalId) {
 }
 
 function openAuthModal(tab = 'login') {
+    // Reset any previous validation indicators
+    const phoneInput = document.getElementById('reg-phone');
+    const phoneErrorEl = document.getElementById('reg-phone-error');
+    if (phoneInput) phoneInput.classList.remove('is-invalid', 'is-valid');
+    if (phoneErrorEl) {
+        phoneErrorEl.style.display = 'none';
+        phoneErrorEl.textContent = '';
+    }
+
     openModal('auth-modal');
     const tabBtn = document.querySelector(`.auth-tab[data-auth-tab="${tab}"]`);
     if (tabBtn) tabBtn.click();
