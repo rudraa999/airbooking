@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyBooker - Flight Booking & Reservations</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header class="navbar">
+        <div class="nav-container">
+            <a class="brand" data-view-target="flights-view">
+                <span class="brand-icon">✈</span>
+                <span>SkyBooker</span>
+            </a>
+
+            <nav class="nav-links">
+                <button class="nav-btn active" data-view-target="flights-view" id="nav-search-flights-btn">Search Flights</button>
+                <button class="nav-btn" data-view-target="my-bookings-view" id="nav-my-bookings-btn" style="display: none;">My Bookings</button>
+                <button class="nav-btn admin-link" data-view-target="admin-view" id="nav-admin-btn" style="display: none;">Admin Dashboard</button>
+            </nav>
+
+            <!-- Authentication Controls -->
+            <div class="auth-section">
+                <!-- Logged Out View -->
+                <div id="nav-logged-out" style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-outline btn-sm" id="nav-login-btn">Login</button>
+                    <button class="btn btn-primary btn-sm" id="nav-register-btn">Sign Up</button>
+                </div>
+
+                <!-- Logged In View -->
+                <div id="nav-logged-in" style="display: none; align-items: center; gap: 0.65rem;">
+                    <div class="user-badge">
+                        <span id="user-full-name">User</span>
+                        <span class="role-tag" id="user-role-badge">User</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm" id="logout-btn">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-content">
+
+        <!-- 1. Flight Search & Results View -->
+        <section id="flights-view" class="view-section active">
+            <!-- Search Panel -->
+            <div class="search-card">
+                <h1 class="search-title">Book Flights</h1>
+                <form id="flight-search-form" class="search-form">
+                    <div class="form-group">
+                        <label class="form-label" for="search-source">From (Origin)</label>
+                        <input type="text" id="search-source" class="form-control" placeholder="e.g. Delhi, Mumbai">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="search-destination">To (Destination)</label>
+                        <input type="text" id="search-destination" class="form-control" placeholder="e.g. Bengaluru, Goa">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="search-date">Departure Date</label>
+                        <input type="date" id="search-date" class="form-control">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="submit" class="btn btn-primary" id="search-submit-btn">Search Flights</button>
+                        <button type="button" class="btn btn-outline" id="search-reset-btn">Reset</button>
+                    </div>
+                </form>
+
+                <!-- Quick Route Chips -->
+                <div class="quick-routes">
+                    <span>Popular Routes:</span>
+                    <button type="button" class="route-chip" data-src="Delhi" data-dest="Mumbai">Delhi → Mumbai</button>
+                    <button type="button" class="route-chip" data-src="Mumbai" data-dest="Goa">Mumbai → Goa</button>
+                    <button type="button" class="route-chip" data-src="Delhi" data-dest="Bengaluru">Delhi → Bengaluru</button>
+                    <button type="button" class="route-chip" data-src="Mumbai" data-dest="Bengaluru">Mumbai → Bengaluru</button>
+                </div>
+            </div>
+
+            <!-- Flight Results -->
+            <div class="section-header">
+                <h2 class="section-title">Available Flights</h2>
+                <span id="flights-count" style="font-size: 0.85rem; color: #64748b;">Loading flights...</span>
+            </div>
+
+            <div id="flights-list-container" class="flights-list">
+                <!-- Flight Cards injected via JS -->
+            </div>
+        </section>
+
+        <!-- 2. My Bookings View -->
+        <section id="my-bookings-view" class="view-section">
+            <div class="section-header">
+                <h2 class="section-title">My Bookings & Tickets</h2>
+                <button class="btn btn-primary btn-sm" data-view-target="flights-view">Book Another Flight</button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Ticket No</th>
+                            <th>Airline & Flight</th>
+                            <th>Route</th>
+                            <th>Departure Time</th>
+                            <th>Seat</th>
+                            <th>Fare</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="my-bookings-table-body">
+                        <!-- Injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. Admin Dashboard View -->
+        <section id="admin-view" class="view-section">
+            <div class="section-header">
+                <h2 class="section-title">Admin Management Dashboard</h2>
+                <button class="btn btn-primary btn-sm" onclick="openAddFlightModal()">+ Add New Flight</button>
+            </div>
+
+            <!-- Stats Overview Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Flights</div>
+                    <div class="stat-value" id="stat-total-flights">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Flights</div>
+                    <div class="stat-value" id="stat-active-flights">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Bookings</div>
+                    <div class="stat-value" id="stat-total-bookings">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-value" id="stat-total-revenue" style="color: #059669;">₹0</div>
+                </div>
+            </div>
+
+            <!-- Admin Sub-tabs -->
+            <div class="admin-tabs">
+                <button class="tab-btn active" data-admin-tab="flights">Manage Flights</button>
+                <button class="tab-btn" data-admin-tab="bookings">All Passenger Bookings</button>
+            </div>
+
+            <!-- Admin Flights Table -->
+            <div id="admin-flights-tab">
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Flight No</th>
+                                <th>Airline</th>
+                                <th>Route</th>
+                                <th>Departure</th>
+                                <th>Arrival</th>
+                                <th>Seats</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-flights-table-body">
+                            <!-- Injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Admin Bookings Table -->
+            <div id="admin-bookings-tab" style="display: none;">
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Ticket No</th>
+                                <th>Passenger</th>
+                                <th>Flight</th>
+                                <th>Route</th>
+                                <th>Seat</th>
+                                <th>Total Paid</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-bookings-table-body">
+                            <!-- Injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal 1: Booking Confirmation / Reservation Form -->
+    <div id="booking-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Complete Your Booking</h3>
+                <button class="modal-close" data-close-modal="booking-modal">&times;</button>
+            </div>
+            <form id="booking-form">
+                <div class="modal-body">
+                    <!-- Flight Summary Strip -->
+                    <div class="flight-summary-strip">
+                        <div>
+                            <div class="flight-strip-route" id="booking-modal-route">DEL → BOM</div>
+                            <div class="flight-strip-airline" id="booking-modal-airline">Air India AI-202</div>
+                        </div>
+                        <div class="flight-strip-price" id="booking-modal-price">₹4,500</div>
+                    </div>
+
+                    <!-- Passenger Input Details -->
+                    <div class="form-group" style="margin-bottom: 0.85rem;">
+                        <label class="form-label" for="passenger-name">Passenger Full Name *</label>
+                        <input type="text" id="passenger-name" class="form-control" required placeholder="As shown on ID">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="passenger-email">Email Address *</label>
+                            <input type="email" id="passenger-email" class="form-control" required placeholder="ticket@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="passenger-phone">Mobile Number *</label>
+                            <input type="tel" id="passenger-phone" class="form-control" required placeholder="e.g. +91 9876543210">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="passenger-age">Age *</label>
+                            <input type="number" id="passenger-age" class="form-control" min="1" max="120" required value="28">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="passenger-seat">Preferred Seat (Optional)</label>
+                            <input type="text" id="passenger-seat" class="form-control" placeholder="e.g. 12A (or Auto)">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" data-close-modal="booking-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="confirm-booking-btn">Confirm & Book</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: Digital Boarding Pass & Ticket Confirmation -->
+    <div id="ticket-modal" class="modal-backdrop">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="ticket-modal-title">Booking Confirmed!</h3>
+                <button class="modal-close" data-close-modal="ticket-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="ticket-wrapper">
+                    <div class="ticket-header">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Ticket Number</div>
+                            <div class="ticket-num-badge" id="ticket-number-val">TKT-261021-9876</div>
+                        </div>
+                        <div id="ticket-status-info">
+                            <span class="badge badge-success">CONFIRMED</span>
+                        </div>
+                    </div>
+
+                    <div class="ticket-grid">
+                        <div>
+                            <div class="ticket-field-label">Passenger</div>
+                            <div class="ticket-field-value" id="ticket-passenger-name">John Doe</div>
+                            <div style="font-size: 0.8rem; color: #64748b;" id="ticket-passenger-contact">john@example.com</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Seat Assigned</div>
+                            <div class="ticket-field-value" id="ticket-seat-info" style="color: #1d4ed8;">14B</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Flight Details</div>
+                            <div class="ticket-field-value" id="ticket-flight-info">Air India (AI-202)</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Route</div>
+                            <div class="ticket-field-value" id="ticket-route-info">Delhi → Mumbai</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Departure</div>
+                            <div class="ticket-field-value" id="ticket-departure-info">22 Oct 2026, 06:00 AM</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Arrival</div>
+                            <div class="ticket-field-value" id="ticket-arrival-info">22 Oct 2026, 08:15 AM</div>
+                        </div>
+                        <div>
+                            <div class="ticket-field-label">Total Amount Paid</div>
+                            <div class="ticket-field-value" id="ticket-fare-info" style="color: #059669;">₹4,850</div>
+                        </div>
+                    </div>
+
+                    <div class="ticket-barcode">
+                        <div>||| | ||||| || |||||| |||| | ||||| |||</div>
+                        <div style="font-size: 0.75rem; margin-top: 0.25rem;" id="ticket-barcode-num">* TKT-261021-9876 *</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="window.print()">🖨️ Print Ticket</button>
+                <button type="button" class="btn btn-primary" onclick="closeModal('ticket-modal'); switchView('my-bookings-view');">View All Bookings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Authentication (Login / Register) -->
+    <div id="auth-modal" class="modal-backdrop">
+        <div class="modal-content" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Sign In to SkyBooker</h3>
+                <button class="modal-close" data-close-modal="auth-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Auth Tabs -->
+                <div class="auth-tabs">
+                    <button class="auth-tab active" data-auth-tab="login">Login</button>
+                    <button class="auth-tab" data-auth-tab="register">Create Account</button>
+                </div>
+
+                <!-- Demo Credentials Quick Fill -->
+                <div class="demo-credentials">
+                    <div style="font-weight: 500;">Quick Demo Credentials:</div>
+                    <div class="demo-btn-group">
+                        <button type="button" class="btn btn-outline btn-sm" id="demo-user-btn">User: john_doe</button>
+                        <button type="button" class="btn btn-outline btn-sm" id="demo-admin-btn">Admin: admin</button>
+                    </div>
+                </div>
+
+                <!-- Login Form -->
+                <div id="login-form-container">
+                    <form id="login-form">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
+                            <label class="form-label" for="login-username">Username</label>
+                            <input type="text" id="login-username" class="form-control" required placeholder="Enter username">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="login-password">Password</label>
+                            <input type="password" id="login-password" class="form-control" required placeholder="Enter password">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                    </form>
+                </div>
+
+                <!-- Register Form -->
+                <div id="register-form-container" style="display: none;">
+                    <form id="register-form">
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
+                            <label class="form-label" for="reg-fullname">Full Name *</label>
+                            <input type="text" id="reg-fullname" class="form-control" required placeholder="John Doe">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
+                            <label class="form-label" for="reg-username">Username *</label>
+                            <input type="text" id="reg-username" class="form-control" required placeholder="johndoe">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
+                            <label class="form-label" for="reg-email">Email Address *</label>
+                            <input type="email" id="reg-email" class="form-control" required placeholder="john@example.com">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.85rem;">
+                            <label class="form-label" for="reg-phone">Phone Number</label>
+                            <input type="tel" id="reg-phone" class="form-control" placeholder="+91 9876543210">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label class="form-label" for="reg-password">Password (min 6 characters) *</label>
+                            <input type="password" id="reg-password" class="form-control" minlength="6" required placeholder="Choose a password">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 4: Admin Add / Edit Flight -->
+    <div id="admin-flight-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="admin-flight-modal-title">Add New Flight</h3>
+                <button class="modal-close" data-close-modal="admin-flight-modal">&times;</button>
+            </div>
+            <form id="admin-flight-form">
+                <div class="modal-body">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-number">Flight Number *</label>
+                            <input type="text" id="flight-form-number" class="form-control" required placeholder="e.g. AI-202">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-airline">Airline Name *</label>
+                            <input type="text" id="flight-form-airline" class="form-control" required placeholder="e.g. Air India">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-source">Source City *</label>
+                            <input type="text" id="flight-form-source" class="form-control" required placeholder="e.g. Delhi">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-destination">Destination City *</label>
+                            <input type="text" id="flight-form-destination" class="form-control" required placeholder="e.g. Mumbai">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-departure">Departure Time *</label>
+                            <input type="datetime-local" id="flight-form-departure" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-arrival">Arrival Time *</label>
+                            <input type="datetime-local" id="flight-form-arrival" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem;">
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-price">Price (₹) *</label>
+                            <input type="number" id="flight-form-price" class="form-control" required min="100" step="50" placeholder="4500">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-seats">Total Seats *</label>
+                            <input type="number" id="flight-form-seats" class="form-control" required min="1" max="600" value="180">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="flight-form-status">Status</label>
+                            <select id="flight-form-status" class="form-control">
+                                <option value="SCHEDULED">SCHEDULED</option>
+                                <option value="DELAYED">DELAYED</option>
+                                <option value="CANCELLED">CANCELLED</option>
+                                <option value="COMPLETED">COMPLETED</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" data-close-modal="admin-flight-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="save-flight-btn">Save Flight</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Application Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

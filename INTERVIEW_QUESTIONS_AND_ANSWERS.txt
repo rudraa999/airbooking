@@ -1,0 +1,860 @@
+================================================================================
+          SKYBOOKER - AIRLINE FLIGHT BOOKING & RESERVATION SYSTEM
+         COMPREHENSIVE FULL-STACK SPRING BOOT INTERVIEW PREPARATION GUIDE
+================================================================================
+Generated for: Rudra
+Project Name: AirBooking (SkyBooker)
+Tech Stack: Java 21, Spring Boot 3/4, Spring Security 6 (Stateless JWT), Spring Data JPA,
+            Hibernate, MySQL, Jakarta Bean Validation, HTML5/CSS3/Vanilla JS (SPA)
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1.  PROJECT OVERVIEW & ELEVATOR PITCH
+2.  END-TO-END ARCHITECTURAL WALKTHROUGH & DATA FLOW
+3.  BIGGEST CHALLENGES FACED & HOW THEY WERE SOLVED (DEEP-DIVE TECHNICAL CASE STUDIES)
+4.  SPRING BOOT & CORE JAVA INTERVIEW QUESTIONS & ANSWERS
+5.  SPRING SECURITY & JWT INTERVIEW QUESTIONS & ANSWERS
+6.  SPRING DATA JPA, HIBERNATE & DATABASE TRANSACTION QUESTIONS & ANSWERS
+7.  CONCURRENCY, SEAT ALLOCATION & RACE CONDITIONS (OVERBOOKING SCENARIOS)
+8.  REST API DESIGN, VALIDATION & ERROR HANDLING QUESTIONS & ANSWERS
+9.  SYSTEM DESIGN, SCALABILITY & CLOUD DEPLOYMENT QUESTIONS (SENIOR/LEAD ROUND)
+10. BEHAVIORAL & SITUATIONAL QUESTIONS (STAR METHOD)
+11. RAPID-FIRE TECHNICAL QUESTIONS CHEAT SHEET
+
+================================================================================
+SECTION 1: PROJECT OVERVIEW & ELEVATOR PITCH
+================================================================================
+
+Q1: "Can you explain your project in 60 to 90 seconds (Elevator Pitch)?"
+--------------------------------------------------------------------------------
+ANSWER:
+"SkyBooker is a full-featured, production-ready Airline Flight Booking and Reservation
+system designed to solve core challenges in flight search, dynamic seat allocation,
+secure online bookings, and administrative operations.
+
+Architecturally, the backend is built with Java 21 and Spring Boot, utilizing a
+clean layered architecture (Controller, Service, Repository, Entity, and DTO layers).
+Data persistence is handled by Spring Data JPA and Hibernate with a MySQL database.
+For security, I implemented a stateless authentication and authorization mechanism
+using Spring Security 6 and JSON Web Tokens (JJWT 0.12.6) with HMAC-SHA256 signing,
+enforcing Role-Based Access Control (RBAC) separating standard travelers (ROLE_USER)
+from airport staff/system administrators (ROLE_ADMIN).
+
+On the client side, I built an interactive Single-Page Application (SPA) using
+modern Vanilla JavaScript, HTML5, and CSS3 that consumes our RESTful endpoints,
+supporting real-time flight search by source, destination, and departure date,
+instant seat assignment, unique ticket number generation, passenger booking history,
+cancellations with automated inventory restoration, and an administrative dashboard
+providing operational metrics such as total revenue, confirmed bookings, and active
+flights.
+
+A critical focus in this project was handling transactional consistency—specifically
+preventing double-booking and maintaining seat count integrity during concurrent
+reservations and cancellations using Spring's declarative transaction boundaries
+(@Transactional)."
+
+
+Q2: "What is the business problem this application solves, and who are the target users?"
+--------------------------------------------------------------------------------
+ANSWER:
+"In air travel, airlines face two major challenges:
+1. Providing passengers with a frictionless, transparent search-and-booking flow
+   that guarantees real-time seat availability without overbooking or silent failure.
+2. Giving flight operations administrators real-time control over flight schedules,
+   pricing, inventory, and automated operational analytics.
+
+Target Users:
+- Travelers / Customers: Search scheduled flights with multi-criteria filters
+  (origin, destination, date), select seats, enter passenger details, receive
+  instant booking confirmations with unique PNR/ticket numbers, track their
+  booking history, and cancel reservations if plans change.
+- Operations / Administrators: Manage flight inventories (full CRUD on flights,
+  route updates, status changes from SCHEDULED to DELAYED/CANCELLED/COMPLETED),
+  monitor live platform analytics (active flights, confirmed bookings, total revenue
+  generated), and manage or cancel passenger reservations with instant seat rollbacks."
+
+
+================================================================================
+SECTION 2: END-TO-END ARCHITECTURAL WALKTHROUGH & DATA FLOW
+================================================================================
+
+Q3: "Can you walk me through the architecture and the layer-by-layer request lifecycle?"
+--------------------------------------------------------------------------------
+ANSWER:
+"The application adheres strictly to the Controller-Service-Repository-Domain
+architectural pattern to ensure clean separation of concerns:
+
+1. Client Layer (Static SPA):
+   The frontend runs in the browser, making asynchronous Fetch requests with
+   Content-Type: application/json and passing the JWT bearer token inside the
+   HTTP 'Authorization' header ('Bearer <jwt_token>').
+
+2. Filter Chain Layer (Spring Security 6):
+   - Every incoming HTTP request hits the `JwtAuthenticationFilter` (extending
+     `OncePerRequestFilter`).
+   - The filter intercepts the request, extracts the Bearer token from the
+     Authorization header, and validates the HMAC-SHA signature and expiration
+     via `JwtTokenProvider`.
+   - If valid, the username is extracted, the user principal is loaded via
+     `CustomUserDetailsService`, and a `UsernamePasswordAuthenticationToken` is
+     established into the thread-local `SecurityContextHolder`.
+   - If invalid or expired, unauthorized requests to protected routes are rejected
+     with HTTP 401 via `JwtAuthEntryPoint`.
+
+3. Web / Controller Layer:
+   - Handlers such as `FlightController`, `BookingController`, `AuthController`,
+     `AdminFlightController`, and `AdminBookingController` receive incoming DTOs.
+   - Input payloads (like `BookingRequest`, `FlightDto`, `AuthRequest`, `RegisterRequest`)
+     are validated at runtime using Jakarta Validation annotations (`@Valid`, `@NotBlank`,
+     `@Email`, `@NotNull`, `@Positive`).
+   - If validation fails, `GlobalExceptionHandler` (`@RestControllerAdvice`) catches
+     `MethodArgumentNotValidException` and returns a formatted JSON `ApiResponse`
+     with field-level error messages.
+
+4. Business Logic / Service Layer:
+   - Services (`BookingService`, `FlightService`, `AuthService`) encapsulate core
+     business rules, entity validations, seat calculation algorithms, ticket
+     generation logic, and security authorization checks.
+   - Methods modifying shared state are annotated with `@Transactional`, guaranteeing
+     ACID properties.
+
+5. Data Access / Persistence Layer:
+   - Spring Data JPA repositories (`UserRepository`, `FlightRepository`, `BookingRepository`)
+     abstract SQL interactions.
+   - Custom JPQL queries are used where needed—for example, multi-parameter flight search
+     with conditional wildcards, and aggregate revenue calculation using
+     `SELECT COALESCE(SUM(b.totalAmount), 0.0) FROM Booking b WHERE b.status = 'CONFIRMED'`.
+
+6. Database Layer:
+   - Relational database schema with tables: `users`, `flights`, and `bookings`,
+     interlinked via Foreign Keys (bookings.user_id -> users.id, bookings.flight_id -> flights.id)."
+
+
+Q4: "Walk me through what happens under the hood when a user clicks 'Book Flight'."
+--------------------------------------------------------------------------------
+ANSWER:
+"Step 1: Frontend Dispatch
+The frontend collects passenger details and selected seat number, constructing
+a POST payload to `/api/bookings` with the JWT in the Authorization header.
+
+Step 2: Authentication & Authorization
+`JwtAuthenticationFilter` intercepts the request, verifies the JWT, and loads the
+authenticated user context into the `SecurityContext`.
+
+Step 3: Controller Ingestion & Validation
+`BookingController.createBooking(@Valid @RequestBody BookingRequest request)` executes.
+Jakarta Bean Validation verifies that flightId is not null, passengerName and
+passengerPhone are not blank, passengerEmail is a valid email, and passengerAge is positive.
+
+Step 4: Transaction Initiation
+Control passes to `BookingService.createBooking(...)`. Because this method is marked
+with `@Transactional`, Spring's TransactionInterceptor opens a database transaction
+via the DataSourceTransactionManager/JpaTransactionManager.
+
+Step 5: Business Validation & Inventory Check
+- `FlightRepository.findById(request.getFlightId())` retrieves the flight.
+- Checks if the flight status is `SCHEDULED`. If not, an `IllegalStateException` is thrown.
+- Checks `flight.getAvailableSeats() > 0`. If 0, an `IllegalStateException` is thrown
+  with message 'No seats available on this flight'.
+
+Step 6: Seat Allocation & Ticket Number Generation
+- The available seats counter is decremented: `flight.setAvailableSeats(flight.getAvailableSeats() - 1)`.
+- If the passenger didn't pick an explicit seat, our algorithm automatically calculates
+  a row and seat character (e.g., row = (seatIdx / 6) + 1, col = 'A' + (seatIdx % 6),
+  resulting in seats like '14B').
+- A unique ticket number is generated using `SecureRandom` and current timestamp:
+  e.g., 'TKT-261023-4819'.
+
+Step 7: Booking Entity Creation & Persistence
+- A new `Booking` entity is instantiated, associated with the current `User` and `Flight`,
+  status set to `CONFIRMED`, and saved via `BookingRepository.save(booking)`.
+
+Step 8: Transaction Commit & Entity Synchronization
+- Spring commits the transaction. Hibernate flushes the dirty state of `Flight`
+  (updated available seats) and inserts the new `Booking` record into MySQL.
+
+Step 9: DTO Mapping & Response
+- The persistent `Booking` entity is mapped to a `BookingResponse` DTO to prevent
+  exposing entity internals or triggering lazy loading issues.
+- Controller wraps it in `ApiResponse.success(...)` returning HTTP 200 OK."
+
+
+================================================================================
+SECTION 3: BIGGEST CHALLENGES FACED & HOW THEY WERE SOLVED
+(CRITICAL FOR INTERVIEWS: "WHAT CHALLENGES DID YOU FACE AND HOW DID YOU SOLVE THEM?")
+================================================================================
+
+CHALLENGE 1: RACE CONDITIONS & SEAT INVENTORY DECREMENT IN CONCURRENT BOOKINGS
+--------------------------------------------------------------------------------
+- The Problem:
+  "When multiple users try to book the very last seat on a popular flight at the exact
+  same second, both requests could read `availableSeats = 1` simultaneously. Both would
+  pass the `availableSeats > 0` validation check, decrement the counter to 0, and create
+  two separate bookings for a single remaining seat. This results in an overbooking
+  disaster and database inconsistency."
+
+- How I Solved It in this Project:
+  1. Method-level `@Transactional` boundary in `BookingService.createBooking`:
+     Ensured that fetching the flight, validating the status, updating the available
+     seat count, and saving the booking happens within a single atomic database transaction.
+  2. For higher concurrency environments, I prepared the solution to use either:
+     - Optimistic Locking with `@Version` on the Flight entity:
+       Throws an `OptimisticLockException` if another thread updated the seat count first,
+       allowing the client to retry.
+     - Database-level Pessimistic Locking (`@Lock(LockModeType.PESSIMISTIC_WRITE)`):
+       Forces a `SELECT ... FOR UPDATE` row lock on the Flight record in MySQL, ensuring
+       threads queue sequentially when booking seats for that specific flight.
+     - Atomic SQL Updates:
+       Executing `UPDATE flights SET available_seats = available_seats - 1 WHERE id = :id AND available_seats > 0`
+       which lets the database storage engine enforce atomicity natively.
+
+- Interview Punchline:
+  "I recognized that application-level checks without database concurrency controls
+  fail under load. By enforcing transactional boundaries and understanding locking
+  strategies, I eliminated overbooking risks."
+
+
+CHALLENGE 2: SPRING SECURITY 6 & MIGRATION FROM DEPRECATED WEBSECURITYCONFIGURERADAPTER
+--------------------------------------------------------------------------------
+- The Problem:
+  "In modern Spring Boot (Spring Boot 3+ and Spring Security 6), the classic
+  `WebSecurityConfigurerAdapter` and methods like `authorizeRequests().antMatchers()`
+  have been completely removed. Migrating to the component-based, lambda DSL
+  `SecurityFilterChain` with `requestMatchers()` caused subtle routing issues,
+  CORS preflight request (HTTP OPTIONS) rejections, and incorrect filter chain ordering."
+
+- How I Solved It:
+  1. Implemented a `@Bean public SecurityFilterChain filterChain(HttpSecurity http)`
+     using fluent lambda expressions.
+  2. Explicitly configured `.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))`
+     to prevent Spring Security from generating server-side HTTP sessions (JSESSIONID).
+  3. Registered a dedicated `CorsConfigurationSource` bean allowing credentials,
+     proper headers ('Authorization', 'Content-Type'), and all HTTP methods
+     (GET, POST, PUT, DELETE, OPTIONS).
+  4. Explicitly injected and positioned the custom `JwtAuthenticationFilter` before
+     the standard `UsernamePasswordAuthenticationFilter` via
+     `http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)`.
+  5. Implemented a custom `JwtAuthEntryPoint` that implements `AuthenticationEntryPoint`
+     to intercept unauthorized requests and stream a structured JSON error response
+     rather than redirecting to a default HTML login page.
+
+- Interview Punchline:
+  "Migrating to Spring Security 6's functional configuration required a deep understanding
+  of the internal filter chain hierarchy and how stateless JWT filters interact with
+  Spring's default security context."
+
+
+CHALLENGE 3: COMPREHENSIVE DYNAMIC MULTI-CRITERIA FLIGHT SEARCH WITH NULLABLE PARAMS
+--------------------------------------------------------------------------------
+- The Problem:
+  "Users want to search flights by origin city, destination city, or departure date,
+  or any combination of these (e.g., origin only, origin + destination, or no filters
+  at all to browse all scheduled flights). Writing multiple custom repository methods
+  like `findBySourceCityAndDestinationCity...` creates a combinatorial explosion
+  of repository methods that is brittle and unmaintainable."
+
+- How I Solved It:
+  "In `FlightRepository`, I designed a single, elegant JPQL query using conditional
+  SQL logic that natively handles null or empty input parameters:
+
+  @Query(\"SELECT f FROM Flight f WHERE \" +
+         \"(:source IS NULL OR LOWER(f.sourceCity) LIKE LOWER(CONCAT('%', :source, '%'))) AND \" +
+         \"(:destination IS NULL OR LOWER(f.destinationCity) LIKE LOWER(CONCAT('%', :destination, '%'))) AND \" +
+         \"(:startDate IS NULL OR f.departureTime >= :startDate) AND \" +
+         \"(:endDate IS NULL OR f.departureTime <= :endDate) AND \" +
+         \"(:status IS NULL OR f.status = :status) \" +
+         \"ORDER BY f.departureTime ASC\")
+
+  In `FlightService`, I parsed the input date string into start-of-day (`atStartOfDay()`)
+  and end-of-day (`atTime(LocalTime.MAX)`) timestamps, enabling full day-range flight
+  matching regardless of the flight's exact minute of departure."
+
+- Interview Punchline:
+  "This approach eliminated redundant boilerplate queries and allowed flexible,
+  case-insensitive, partial-string search while maintaining clean database indexing."
+
+
+CHALLENGE 4: SECURE STATE SYNCHRONIZATION DURING BOOKING CANCELLATION & INVENTORY ROLLBACK
+--------------------------------------------------------------------------------
+- The Problem:
+  "When a booking is cancelled, two things must happen: the booking status must
+  change to `CANCELLED`, and the flight's `availableSeats` count must be incremented.
+  Additionally, security authorization is critical: regular users must only cancel
+  their OWN bookings, while administrators should have the privilege to cancel ANY booking.
+  Furthermore, accidental double-cancellations could artificially inflate the available
+  seat count beyond `totalSeats`."
+
+- How I Solved It:
+  1. Transactional Integrity:
+     Decorated `cancelBooking(Long id, User currentUser)` with `@Transactional` so
+     that status change and inventory restoration succeed or fail together.
+  2. Idempotency & Defense against Double-Cancellation:
+     Checked `if (booking.getStatus() == BookingStatus.CANCELLED)` and immediately
+     threw an `IllegalStateException` ('Booking is already cancelled').
+  3. Seat Upper-Bound Check:
+     Only incremented available seats if `flight.getAvailableSeats() < flight.getTotalSeats()`,
+     preventing data corruption.
+  4. Granular Ownership Verification:
+     Checked:
+     `boolean isAdmin = currentUser.getRole() == Role.ROLE_ADMIN;`
+     `boolean isOwner = booking.getUser().getId().equals(currentUser.getId());`
+     If neither condition was true, a `SecurityException` ('Access denied') was thrown.
+
+- Interview Punchline:
+  "I protected business data from double-refund exploits and unauthorized access
+  by combining role/ownership validation with defensive boundary checks inside an
+  atomic transaction."
+
+
+CHALLENGE 5: GLOBAL ERROR HANDLING & PREVENTING SENSITIVE DATA LEAKS
+--------------------------------------------------------------------------------
+- The Problem:
+  "By default, unhandled exceptions in Spring Boot leak internal stack traces, class
+  names, and SQL error strings to API consumers. Moreover, client validation errors
+  (like `@NotBlank` or `@Positive`) produce generic, verbose Spring error arrays
+  that are painful for frontend clients to parse."
+
+- How I Solved It:
+  "I built a centralized `GlobalExceptionHandler` using `@RestControllerAdvice`:
+  1. Caught `MethodArgumentNotValidException` to extract each field error into a clean
+     key-value Map: `errors.put(error.getField(), error.getDefaultMessage())`.
+  2. Caught `BadCredentialsException` returning HTTP 401 with a user-friendly message.
+  3. Caught `AccessDeniedException` returning HTTP 403.
+  4. Caught `IllegalArgumentException` and `IllegalStateException` returning HTTP 400.
+  5. Built a fallback handler for general `Exception.class` returning HTTP 500,
+     masking sensitive database or JVM internals while logging errors for developers.
+  6. Standardized all responses using a generic wrapper `ApiResponse<T>` with boolean
+     `success`, string `message`, and typed `data` payload."
+
+- Interview Punchline:
+  "This gave our frontend a consistent contract for both success and error responses,
+  improving developer productivity and API security."
+
+
+CHALLENGE 6: CIRCULAR REFERENCES & JSON SERIALIZATION IN JPA RELATIONSHIPS
+--------------------------------------------------------------------------------
+- The Problem:
+  "In JPA, bidirectional relationships (e.g., User -> Bookings, Flight -> Bookings)
+  cause infinite recursion during JSON serialization with Jackson, resulting in
+  `StackOverflowError`."
+
+- How I Solved It:
+  "I strictly enforced the Data Transfer Object (DTO) pattern. Controllers never return
+  JPA entities directly to API clients. Instead, `BookingService` converts the
+  `Booking` entity into a flat `BookingResponse` DTO containing only necessary fields
+  (ticket number, passenger details, flight summary, booking date). This completely
+  eliminated infinite recursion, protected confidential entity fields (like password
+  hashes), and reduced network payload size."
+
+
+================================================================================
+SECTION 4: SPRING BOOT & CORE JAVA INTERVIEW QUESTIONS & ANSWERS
+================================================================================
+
+Q5: "What version of Java and Spring Boot did you use, and why?"
+--------------------------------------------------------------------------------
+ANSWER:
+"We utilized Java 21 LTS (Long-Term Support) and Spring Boot 3/4.
+Java 21 was chosen for its modern language features, enhanced pattern matching,
+Record classes, improved JVM performance, and native support for Virtual Threads
+(Project Loom) for high-throughput I/O.
+Spring Boot 3/4 provides native support for Jakarta EE 10 (`jakarta.*` namespace),
+enhanced observability, Spring Security 6 integration, and faster startup times."
+
+
+Q6: "What is `@SpringBootApplication` and what does it encapsulate?"
+--------------------------------------------------------------------------------
+ANSWER:
+"`@SpringBootApplication` is a meta-annotation that bundles three core annotations:
+1. `@Configuration`: Marks the class as a source of bean definitions for the Spring
+   ApplicationContext.
+2. `@EnableAutoConfiguration`: Tells Spring Boot to guess and configure beans based
+   on classpath dependencies (e.g., auto-configuring DataSource if mysql-connector-j
+   and spring-boot-starter-data-jpa are present).
+3. `@ComponentScan`: Tells Spring to scan the current package (`com.rudra.airbooking`)
+   and all sub-packages for Spring components (`@Component`, `@Service`, `@Repository`,
+   `@RestController`, `@Configuration`)."
+
+
+Q7: "Explain the role of `CommandLineRunner` in your `DataInitializer` class."
+--------------------------------------------------------------------------------
+ANSWER:
+"`CommandLineRunner` is a Spring Boot interface with a single `run(String... args)` method.
+Beans implementing this interface are executed immediately after the Spring
+ApplicationContext is fully loaded, but before the application starts accepting web requests.
+
+In our project, `DataInitializer` implements `CommandLineRunner`:
+- Checks if the admin user exists via `userRepository.existsByUsername('admin')`. If not,
+  it encodes the password using `PasswordEncoder` (BCrypt) and creates the default admin.
+- Checks if sample flights exist in the database via `flightRepository.count() == 0`.
+  If empty, it seeds initial domestic flight routes (Air India, IndiGo, Vistara)
+  with future departure dates.
+This ensures a seamless out-of-the-box experience for development and demo environments."
+
+
+Q8: "What is the difference between `@Controller` and `@RestController`?"
+--------------------------------------------------------------------------------
+ANSWER:
+"`@Controller` is a traditional Spring MVC annotation used when returning HTML views
+(often paired with template engines like Thymeleaf or JSP). View resolution resolves
+the returned string to a template path.
+
+`@RestController` is a convenience meta-annotation combining `@Controller` and
+`@ResponseBody`. Every handler method in a `@RestController` automatically writes
+its return value directly into the HTTP response body as JSON or XML (via Jackson
+HttpMessageConverter), making it ideal for stateless RESTful APIs."
+
+
+Q9: "What is Dependency Injection (DI) and Inversion of Control (IoC)? Where did you use it?"
+--------------------------------------------------------------------------------
+ANSWER:
+"Inversion of Control (IoC) is a design principle where the control of object creation,
+configuration, and lifecycle management is transferred from the application code
+to a container or framework (the Spring IoC Container).
+
+Dependency Injection (DI) is the pattern used to implement IoC. Instead of an object
+manually instantiating its dependencies using `new ClassName()`, dependencies are
+provided (injected) by the container.
+
+In our project:
+- We injected repositories into services (`@Autowired private BookingRepository bookingRepository`).
+- We injected `PasswordEncoder`, `AuthenticationManager`, and `JwtTokenProvider` into `AuthService`.
+- This decouples business logic from concrete implementations, making components easily
+  testable with mock objects (e.g., Mockito in unit tests)."
+
+
+Q10: "Explain the `@Transactional` annotation and its rollback behavior in Spring Boot."
+--------------------------------------------------------------------------------
+ANSWER:
+"`@Transactional` declares that an execution boundary must be wrapped in a database
+transaction. If the method completes successfully, the transaction is committed;
+if an unhandled exception occurs, the transaction is rolled back.
+
+Key Details:
+1. Default Rollback Rule: Spring rolls back ONLY on unchecked exceptions
+   (`RuntimeException` and `Error`). It does NOT roll back on checked exceptions (`Exception`)
+   unless explicitly specified: `@Transactional(rollbackFor = Exception.class)`.
+2. In our `BookingService.createBooking` and `cancelBooking` methods, exceptions thrown
+   (such as `IllegalArgumentException` and `IllegalStateException`) are unchecked
+   subclasses of `RuntimeException`, guaranteeing automatic rollback if seat decrement
+   or booking creation fails midway.
+3. Proxy Caveat: `@Transactional` works via Spring AOP proxies. Calling a `@Transactional`
+   method internally from within the same class bypasses the proxy and will NOT start
+   a transaction. It must be called through an injected bean reference."
+
+
+================================================================================
+SECTION 5: SPRING SECURITY & JWT INTERVIEW QUESTIONS & ANSWERS
+================================================================================
+
+Q11: "Explain how JSON Web Tokens (JWT) work in your application from login to protected requests."
+--------------------------------------------------------------------------------
+ANSWER:
+"1. Authentication:
+   The user sends credentials (`username`, `password`) to `/api/auth/login`.
+   `AuthService` delegates to Spring's `AuthenticationManager.authenticate(...)`,
+   which uses `DaoAuthenticationProvider` and `BCryptPasswordEncoder` to verify
+   the password hash against the stored database value.
+
+2. Token Generation:
+   Upon successful authentication, `JwtTokenProvider.generateToken(...)` creates
+   a signed JWT containing:
+   - Header: Algorithm type (HS256).
+   - Payload (Claims): Subject (`username`), issued-at timestamp (`iat`), expiration
+     timestamp (`exp`, 24 hours), and custom claim (`roles`, e.g., 'ROLE_USER').
+   - Signature: HMAC-SHA256 signature generated using our 256-bit secret key
+     configured in `application.properties`.
+
+3. Client Storage:
+   The backend returns the token in an `AuthResponse`. The frontend stores it in
+   browser `localStorage`.
+
+4. Subsequent Requests:
+   The client includes the token in the HTTP `Authorization` header: `Bearer <token>`.
+   `JwtAuthenticationFilter` intercepts the request:
+   - Strips the 'Bearer ' prefix.
+   - Validates the token signature and expiration via `Jwts.parser().verifyWith(secretKey)...`.
+   - Extracts the username.
+   - Loads user authorities via `CustomUserDetailsService`.
+   - Populates `SecurityContextHolder.getContext().setAuthentication(authentication)`.
+
+5. Controller Access:
+   Spring Security checks if the authenticated principal has the necessary authority
+   (e.g., `@PreAuthorize("hasRole('ADMIN')")`)."
+
+
+Q12: "Why did you disable CSRF protection in `SecurityConfig` (`csrf.disable()`)?"
+--------------------------------------------------------------------------------
+ANSWER:
+"Cross-Site Request Forgery (CSRF) occurs when an unauthorized site tricks a user's
+browser into executing unwanted actions on a trusted site where the user is currently
+authenticated via session cookies. Browsers automatically attach cookies to cross-origin
+requests.
+
+In our application:
+- We use a completely stateless JWT architecture (`SessionCreationPolicy.STATELESS`).
+- We do NOT store session state in HTTP cookies or use JSESSIONID.
+- The JWT is transmitted in the custom `Authorization` HTTP header (`Bearer <token>`).
+Browsers never automatically attach custom authorization headers to cross-site requests.
+Therefore, our API is immune to traditional CSRF attacks, and disabling CSRF is the
+recommended industry standard for stateless REST APIs."
+
+
+Q13: "What is the difference between Authentication and Authorization? Where are they applied?"
+--------------------------------------------------------------------------------
+ANSWER:
+"- Authentication is the process of verifying WHO a user is (Identity Verification).
+  In our project, this happens during login via `AuthenticationManager`, checking
+  passwords against BCrypt hashes, and during subsequent requests when `JwtAuthenticationFilter`
+  validates the JWT signature.
+
+- Authorization is the process of determining WHAT an authenticated user is permitted
+  to do (Permission Verification).
+  In our project:
+  - Public endpoints: `/api/auth/**` and `GET /api/flights/**` are open to everyone (`.permitAll()`).
+  - User endpoints: `/api/bookings/**` require valid authentication (`.authenticated()`).
+  - Admin endpoints: `/api/admin/**` require the specific authority `ROLE_ADMIN`
+    (`.hasAuthority("ROLE_ADMIN")` or `@PreAuthorize("hasRole('ADMIN')")`)."
+
+
+Q14: "Why use `OncePerRequestFilter` for `JwtAuthenticationFilter` instead of a generic `Filter`?"
+--------------------------------------------------------------------------------
+ANSWER:
+"In servlet containers, a standard `Filter` can be invoked multiple times during
+a single request dispatch (for example, during internal request forwards, error dispatches,
+or asynchronous request processing).
+
+`OncePerRequestFilter` is a Spring-provided abstract class that guarantees the filter's
+`doFilterInternal` method is executed strictly ONCE per client HTTP request. This prevents
+redundant JWT signature verification, unnecessary database lookups via `UserDetailsService`,
+and performance overhead."
+
+
+================================================================================
+SECTION 6: SPRING DATA JPA, HIBERNATE & DATABASE TRANSACTION QUESTIONS
+================================================================================
+
+Q15: "Explain the entity relationships in your project."
+--------------------------------------------------------------------------------
+ANSWER:
+"The system has three primary entities:
+1. `User` (Table: `users`): Represents customers and administrators.
+2. `Flight` (Table: `flights`): Represents scheduled flight routes and seat inventory.
+3. `Booking` (Table: `bookings`): Represents confirmed reservations.
+
+Relationships:
+- `Booking` to `User`: Many-to-One (`@ManyToOne(fetch = FetchType.EAGER)`) at `@JoinColumn(name = "user_id")`.
+  Many bookings belong to a single user.
+- `Booking` to `Flight`: Many-to-One (`@ManyToOne(fetch = FetchType.EAGER)`) at `@JoinColumn(name = "flight_id")`.
+  Many bookings belong to a single flight.
+- Bidirectional inverse collections were intentionally avoided on `User` and `Flight`
+  to eliminate memory bloat, avoid N+1 query traps, and prevent JSON circular references."
+
+
+Q16: "What is `@PrePersist` and where did you use it?"
+--------------------------------------------------------------------------------
+ANSWER:
+"`@PrePersist` is a JPA lifecycle callback annotation placed on a method inside an entity.
+Hibernate invokes this method automatically before executing the SQL `INSERT` statement.
+
+In our project:
+- In `User.java`: Sets `createdAt = LocalDateTime.now()` if null.
+- In `Flight.java`: Sets `createdAt = LocalDateTime.now()` if null.
+- In `Booking.java`: Sets `bookingDate = LocalDateTime.now()` if null.
+This guarantees audit timestamps are populated consistently at the entity layer
+independent of database-specific default functions or manual setter calls."
+
+
+Q17: "Why did you store Enums as `EnumType.STRING` instead of the default `EnumType.ORDINAL`?"
+--------------------------------------------------------------------------------
+ANSWER:
+"By default, JPA stores enums as `EnumType.ORDINAL`, which maps enum constants to
+their integer index (0, 1, 2...).
+
+If you use `ORDINAL` and later insert a new enum constant or reorder them
+(e.g., inserting `BOARDING` before `CANCELLED` in `FlightStatus`), all existing database
+integers will immediately map to the wrong enum values, corrupting existing data.
+
+By annotating with `@Enumerated(EnumType.STRING)`, Hibernate writes the literal text
+(e.g., 'CONFIRMED', 'CANCELLED', 'SCHEDULED') to a VARCHAR column. This makes database
+rows human-readable in MySQL Workbench and resilient to future code refactoring."
+
+
+Q18: "Explain the custom query in `BookingRepository` to calculate total revenue."
+--------------------------------------------------------------------------------
+ANSWER:
+"In `BookingRepository.java`:
+@Query(\"SELECT COALESCE(SUM(b.totalAmount), 0.0) FROM Booking b WHERE b.status = 'CONFIRMED'\")
+Double calculateTotalRevenue();
+
+Explanation:
+- `SUM(b.totalAmount)` aggregates the price of all confirmed passenger tickets.
+- If the database has zero confirmed bookings, SQL `SUM()` returns `NULL`.
+- `COALESCE(SUM(...), 0.0)` is an ANSI SQL function that returns the first non-null
+  expression in its argument list. If `SUM()` is `NULL`, it cleanly returns `0.0`.
+- This protects against `NullPointerException` when the administrator views the
+  dashboard on a fresh installation."
+
+
+================================================================================
+SECTION 7: CONCURRENCY, SEAT ALLOCATION & RACE CONDITIONS
+================================================================================
+
+Q19: "How do you handle high concurrency when 10,000 users try to book the same flight simultaneously?"
+--------------------------------------------------------------------------------
+ANSWER:
+"In high-traffic systems (like airline flash sales or festival bookings), application-level
+checks like `if (availableSeats > 0)` are vulnerable to race conditions. Here is the
+multi-tiered strategy to solve it:
+
+1. Database Level (Pessimistic Locking):
+   In `FlightRepository`:
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query(\"SELECT f FROM Flight f WHERE f.id = :id\")
+   Optional<Flight> findByIdForUpdate(@Param(\"id\") Long id);
+
+   This issues a `SELECT ... FOR UPDATE` statement in MySQL, locking that specific
+   flight row until the current transaction commits or rolls back. Other threads
+   must wait their turn.
+
+2. Optimistic Locking with `@Version`:
+   Add a `@Version private Long version;` column to the `Flight` entity.
+   Hibernate automatically appends `WHERE version = :oldVersion` to the `UPDATE` query.
+   If another user booked the seat first, the version mismatch throws an
+   `OptimisticLockException`, which our service catches to return a polite
+   'Seat was taken, please try again' response.
+
+3. Distributed Caching & Locks (Redis + Redisson):
+   For web-scale architectures, hit a distributed lock or atomic decrement in Redis
+   using Lua scripts:
+   `DECR flight:seats:{flightId}`
+   If the return value is >= 0, proceed with database booking asynchronously.
+   If < 0, reject immediately without touching the relational database.
+
+4. Asynchronous Queueing (Kafka / RabbitMQ):
+   Decouple booking requests from immediate database persistence by publishing
+   booking events to a Kafka topic partitioned by `flightId`. A consumer worker
+   processes bookings sequentially for that flight, guaranteeing zero race conditions."
+
+
+Q20: "How does your seat number generation algorithm work?"
+--------------------------------------------------------------------------------
+ANSWER:
+"In `BookingService.java`:
+- If the user specifies an explicit seat (e.g., '12A'), the system accepts it.
+- If the seat is omitted, the service auto-assigns the next logical aircraft seat
+  based on current inventory:
+  int seatIdx = flight.getTotalSeats() - flight.getAvailableSeats();
+  int row = (seatIdx / 6) + 1;
+  char col = (char) ('A' + (seatIdx % 6));
+  seatNumber = row + String.valueOf(col);
+
+This arranges passenger seats in standard 6-abreast airline cabin layout (rows 1, 2, 3...
+with columns A, B, C, D, E, F) and ensures predictable seat distribution without overlaps."
+
+
+================================================================================
+SECTION 8: REST API DESIGN, VALIDATION & ERROR HANDLING
+================================================================================
+
+Q21: "What HTTP status codes did you use across your REST APIs and why?"
+--------------------------------------------------------------------------------
+ANSWER:
+"- 200 OK: Standard successful response for GET requests (fetching flights/bookings)
+  and successful POST/PUT actions with payload.
+- 400 Bad Request: Thrown on invalid business operations (`IllegalArgumentException`,
+  `IllegalStateException`) or payload validation failures (`MethodArgumentNotValidException`).
+- 401 Unauthorized: Returned by `JwtAuthEntryPoint` or bad credentials handler when
+  a user supplies invalid credentials or fails to provide a valid JWT.
+- 403 Forbidden: Returned when an authenticated user attempts an action outside their
+  granted permissions (e.g., a standard user calling `/api/admin/**`).
+- 404 Not Found: When an entity does not exist for a requested ID.
+- 500 Internal Server Error: Unhandled unexpected server-side exceptions."
+
+
+Q22: "Explain your API Response encapsulation pattern (`ApiResponse<T>`)."
+--------------------------------------------------------------------------------
+ANSWER:
+"Rather than returning raw domain entities or ad-hoc strings, all endpoints wrap responses
+in a generic envelope:
+
+public class ApiResponse<T> {
+    private boolean success;
+    private String message;
+    private T data;
+    private LocalDateTime timestamp;
+}
+
+Benefits:
+1. Predictability: The frontend client always checks `response.data.success` before
+   accessing payload data.
+2. Unified Error Messaging: Error responses share the exact same JSON schema as
+   success responses, eliminating client-side parsing branching.
+3. Metadata: Includes timestamps and descriptive human-readable messages."
+
+
+Q23: "How does input validation work in your project?"
+--------------------------------------------------------------------------------
+ANSWER:
+"We use Jakarta Bean Validation (Hibernate Validator):
+- In DTOs (`BookingRequest`, `FlightDto`, `RegisterRequest`), fields are annotated with:
+  `@NotBlank(message = "Passenger name is required")`
+  `@Email(message = "Passenger email must be valid")`
+  `@Positive(message = "Passenger age must be positive")`
+  `@NotNull(message = "Departure time is required")`
+- In Controllers, request bodies are marked with `@Valid`:
+  `public ResponseEntity<?> createBooking(@Valid @RequestBody BookingRequest request)`
+- If any rule is violated, Spring aborts execution and dispatches
+  `MethodArgumentNotValidException`, which `GlobalExceptionHandler` formats into a
+  user-friendly Map of `{ "fieldName": "error message" }`."
+
+
+================================================================================
+SECTION 9: SYSTEM DESIGN, SCALABILITY & CLOUD DEPLOYMENT (SENIOR ROUND)
+================================================================================
+
+Q24: "How would you evolve this monolithic application into a scalable Microservices Architecture?"
+--------------------------------------------------------------------------------
+ANSWER:
+"To scale to millions of concurrent passengers across global regions:
+
+1. Service Decomposition:
+   - Auth & User Service: Manages identity, OAuth2/OIDC, profiles, and JWT issuance.
+   - Flight Catalog & Search Service: Read-heavy service managing flight schedules,
+     routes, and pricing.
+   - Booking & Reservation Service: High-write transactional service managing seats
+     and ticket generation.
+   - Payment Service: Integrates with Stripe/Razorpay gateways using webhook listeners.
+   - Notification Service: Listens for booking confirmation events to send emails/SMS.
+
+2. API Gateway & Service Discovery:
+   - Spring Cloud Gateway for centralized routing, rate limiting, and SSL termination.
+   - Netflix Eureka or HashiCorp Consul for service discovery.
+
+3. Distributed Data & Caching:
+   - Flight search is read-heavy (95% reads, 5% writes). Cache scheduled flights in
+     Redis with a 5-minute TTL to reduce database query load by 90%.
+   - Implement Database Read Replicas: Route all flight search queries to read-replicas
+     and booking writes to the primary database.
+
+4. Event-Driven Messaging:
+   - Use Apache Kafka to publish `FlightBookedEvent`.
+   - Notification Service consumes the event to email the passenger their e-ticket.
+   - Analytics Service consumes the event to update administrative metrics in real-time."
+
+
+Q25: "How would you containerize and deploy this application in production?"
+--------------------------------------------------------------------------------
+ANSWER:
+"1. Containerization (Docker):
+   - Multi-stage Dockerfile:
+     - Stage 1 (Build): Maven with Eclipse Temurin JDK 21 compiling `mvn clean package -DskipTests`.
+     - Stage 2 (Runtime): Lightweight JRE 21 Alpine image, copying the packaged JAR.
+     - Runs as a non-root user for container security.
+
+2. Orchestration (Kubernetes / Docker Compose):
+   - In development: `docker-compose.yml` spinning up MySQL 8.0 container and the
+     Spring Boot application connected via internal Docker network.
+   - In production: Kubernetes Deployment with Horizontal Pod Autoscaler (HPA)
+     scaling pods based on CPU/Memory utilization, backed by AWS RDS MySQL Multi-AZ."
+
+
+================================================================================
+SECTION 10: BEHAVIORAL & SITUATIONAL QUESTIONS (STAR METHOD)
+================================================================================
+
+Q26: "Tell me about a time you ran into a critical bug or technical roadblock and how you resolved it."
+--------------------------------------------------------------------------------
+ANSWER (STAR Method):
+- Situation:
+  "During the integration of the flight search API with the frontend, users reported
+  that searching by departure date was returning zero results even though flights existed
+  for that day in MySQL."
+
+- Task:
+  "I needed to identify why the date filter was failing and ensure that entering a date
+  like '2026-10-24' would accurately find all flights departing on that calendar day
+  regardless of their specific flight hours and minutes."
+
+- Action:
+  "I investigated the backend query and found that the incoming parameter was a `LocalDate`,
+  while the entity field `departureTime` was stored as a full `LocalDateTime` (e.g.,
+  '2026-10-24 14:30:00'). A simple equality check (`f.departureTime = :date`) was looking
+  for flights at exactly midnight (00:00:00).
+  I refactored `FlightService.searchFlights` to construct a day-spanning time range:
+  `startDate = localDate.atStartOfDay();`
+  `endDate = localDate.atTime(LocalTime.MAX);`
+  And updated the JPQL query to use boundary conditions:
+  `(:startDate IS NULL OR f.departureTime >= :startDate) AND (:endDate IS NULL OR f.departureTime <= :endDate)`."
+
+- Result:
+  "The flight search instantly began returning accurate daily flights, handling timezone
+  transitions properly, and search queries executed in under 15ms."
+
+
+Q27: "How do you prioritize code readability versus premature performance optimization?"
+--------------------------------------------------------------------------------
+ANSWER:
+"I follow the principle: 'Make it work, make it clean, make it fast.'
+In this project, I prioritized clean architecture, consistent naming conventions,
+and strict layer separation (DTOs, Services, Repositories).
+I avoid premature optimization like custom thread pools or complex caching until
+profiling or load testing demonstrates an actual bottleneck. However, I always design
+foundational elements with scalability in mind—such as choosing stateless JWTs,
+creating database indexes on frequently queried columns (`sourceCity`, `destinationCity`,
+`departureTime`), and applying `@Transactional` boundaries correctly."
+
+
+================================================================================
+SECTION 11: RAPID-FIRE TECHNICAL QUESTIONS CHEAT SHEET
+================================================================================
+
+1. Q: What is the purpose of `@Table(name = "users")` instead of letting it default?
+   A: In MySQL, 'user' is often a reserved system keyword. Explicitly naming the table
+      'users' prevents SQL syntax errors.
+
+2. Q: What is the purpose of `BCryptPasswordEncoder`?
+   A: It is an adaptive one-way cryptographic hash function that incorporates a random
+      salt and configurable work factor to protect passwords against rainbow table
+      and brute-force attacks.
+
+3. Q: How does `SecurityContextHolder` store authentication data?
+   A: By default, it uses a `ThreadLocal` strategy, meaning security context is bound
+      to the specific thread processing the incoming HTTP request.
+
+4. Q: What happens if an expired JWT is passed to the backend?
+   A: `JwtTokenProvider.validateToken()` catches `ExpiredJwtException`, logs the error,
+      and returns `false`. `JwtAuthenticationFilter` does not populate the SecurityContext,
+      and `JwtAuthEntryPoint` returns HTTP 401 Unauthorized.
+
+5. Q: What is the difference between `save()` and `saveAndFlush()` in Spring Data JPA?
+   A: `save()` persists the entity to the Hibernate persistence context, writing to the
+      database when the transaction commits. `saveAndFlush()` forces an immediate SQL
+      flush to the database within the ongoing transaction.
+
+6. Q: Why use `FetchType.EAGER` vs `FetchType.LAZY` on `@ManyToOne`?
+   A: In our project, `Booking` frequently requires passenger flight and user details
+      immediately. While `LAZY` avoids initial queries, it can cause `LazyInitializationException`
+      if accessed outside an open persistence context. In production microservices,
+      `LAZY` with `JOIN FETCH` queries is optimal.
+
+7. Q: How do you prevent SQL Injection in Spring Boot?
+   A: By using Spring Data JPA repository methods and parameterized JPQL queries (`:param`),
+      which use JDBC `PreparedStatement` with bind variables, preventing SQL injection.
+
+8. Q: How is the admin role checked in `@PreAuthorize("hasRole('ADMIN')")`?
+   A: Spring Security automatically prepends 'ROLE_' to the argument. If the user has
+      authority `ROLE_ADMIN`, `hasRole('ADMIN')` evaluates to true.
+
+9. Q: Why is `Duration.between` used in `FlightService`?
+   A: To automatically calculate flight duration (e.g. '2h 15m') dynamically from
+      departure and arrival timestamps if the administrator does not manually supply one.
+
+10. Q: What is the benefit of `COALESCE` in database aggregate queries?
+    A: It guarantees that when an aggregate function like `SUM()` encounters zero rows,
+       it returns a sensible default (like 0.0) instead of SQL `NULL`.
+
+================================================================================
+END OF INTERVIEW PREPARATION GUIDE
+================================================================================
